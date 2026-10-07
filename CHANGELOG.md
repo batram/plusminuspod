@@ -11,6 +11,10 @@ release notes.
 
 ## [Unreleased]
 
+### Changed
+- The LLM benchmark can run and report two ad-detection prompt variants side by side via `--prompt-variant` (`detection`, the production prompt, or `segmentation`, an alternative that segments the whole episode). `benchmark compare` renders a paired comparison between them.
+- `benchmark run` and `benchmark report` accept `--model`/`--episode` filters, and community segmentation-prompt results from PR #801 are importable via `scripts/import_calls.py`.
+
 ## [2.100.11] - 2026-10-12
 
 Maintenance release with no new functionality. The processing pipeline, API, and UI behave as in 2.100.10. The work is module splits, documentation, dependency updates, OpenAPI corrections, and one settings save fix.
