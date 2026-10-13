@@ -16,8 +16,10 @@ benchmarks/llm/
     pricing_snapshots/       # committed pricing history
   results/
     raw/                     # calls/<model>.jsonl, responses/<model>.jsonl shards, episode_results.jsonl
-    report.md                # current report
+    report.md                # current full-campaign report
     report_assets/           # SVG charts referenced by report.md
+    report-prompt-testing.md # detection cell of the PR #801 / #824 prompt comparison, with report_assets-prompt-testing/
+    comparison.md            # paired prompt-variant comparison (benchmark compare)
     archive/                 # explicit snapshots: results/archive/<date>/
 ```
 
