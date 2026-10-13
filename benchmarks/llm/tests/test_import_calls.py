@@ -1,4 +1,4 @@
-"""Tests for scripts/import_calls.py: idempotency and prompt_variant key placement."""
+"""Tests for scripts/import_calls.py: idempotency, variant stamping, and all-or-nothing writes."""
 from __future__ import annotations
 
 import importlib.util
@@ -88,6 +88,27 @@ def test_import_is_idempotent(tmp_path):
     assert len(list(read_calls(dest))) == 2
     assert len((dest / "responses" / "deepseek_deepseek-v4-flash.jsonl").read_text().splitlines()) == 1
     assert len((dest / "responses" / "gemma4_e4b.jsonl").read_text().splitlines()) == 1
+
+
+def test_unknown_variant_is_rejected_before_writing(tmp_path):
+    src = _make_source(tmp_path)
+    dest = tmp_path / "dest_raw"
+    with pytest.raises(ValueError, match="unknown prompt variant"):
+        import_calls.import_calls(src, "segmentaton", dest_raw=dest)
+    assert list(read_calls(dest)) == []
+
+
+def test_missing_source_shard_writes_no_call_rows(tmp_path):
+    src = _make_source(tmp_path)
+    (src / "responses" / "gemma4_e4b.jsonl").unlink()
+    dest = tmp_path / "dest_raw"
+    with pytest.raises(FileNotFoundError):
+        import_calls.import_calls(src, "segmentation", dest_raw=dest)
+    assert list(read_calls(dest)) == []
+    # Nothing was committed, so the rerun after restoring the shard imports everything.
+    _write_jsonl(src / "responses" / "gemma4_e4b.jsonl", [{"call_id": "m2_ep1_t0_w0_def", "body": "[]"}])
+    rows_added, _ = import_calls.import_calls(src, "segmentation", dest_raw=dest)
+    assert rows_added == 2
 
 
 def test_missing_addressing_mode_raises(tmp_path):

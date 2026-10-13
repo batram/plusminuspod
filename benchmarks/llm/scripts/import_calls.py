@@ -10,6 +10,7 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 sys.path.insert(0, str(REPO_ROOT / "benchmarks" / "llm" / "src"))
 
 from benchmark.storage import append_calls, dump_line, read_calls, read_jsonl, safe_model_id  # noqa: E402
+from benchmark.variants import validate_variant  # noqa: E402
 
 DEST_RAW = Path(__file__).resolve().parents[1] / "results" / "raw"
 
@@ -24,6 +25,7 @@ def import_calls(from_raw: Path, variant: str, dest_raw: Path = DEST_RAW) -> tup
     Reads from_raw via read_calls, which handles both a legacy flat
     calls.jsonl (the #801-style checkout) and calls/ shards transparently.
     """
+    validate_variant(variant)
     existing_ids = {rec["call_id"] for rec in read_calls(dest_raw)}
 
     new_rows: list[dict] = []
@@ -37,8 +39,10 @@ def import_calls(from_raw: Path, variant: str, dest_raw: Path = DEST_RAW) -> tup
         new_rows.append({**row, "prompt_variant": variant})
         new_ids_by_model.setdefault(row["model"], set()).add(call_id)
 
-    append_calls(dest_raw, new_rows, existing_ids=existing_ids)
+    # Response lines first: a missing source shard then fails before any call
+    # row is written, so a rerun still sees the rows as new.
     shard_counts = _import_shards(from_raw, dest_raw, new_ids_by_model)
+    append_calls(dest_raw, new_rows, existing_ids=existing_ids)
     return len(new_rows), shard_counts
 
 

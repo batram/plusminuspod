@@ -241,7 +241,7 @@ def run(
         "'segmentation' (frozen prompt; --snapshot not allowed with it).",
     ),
     model: list[str] = typer.Option(
-        [], "--model", help="Only run this model id (exact match); repeatable. Unknown ids exit 2.",
+        [], "--model", help="Only run this model id (exact match); repeatable. Unknown or deprecated ids exit 2.",
     ),
     episode: list[str] = typer.Option(
         [], "--episode", help="Only run this episode directory name (exact match); repeatable. Unknown names exit 2.",
@@ -258,7 +258,8 @@ def run(
         typer.echo("no corpus episodes; run `benchmark capture` first", err=True)
         raise typer.Exit(1)
 
-    only_models = _require_known(model, {m.id for m in cfg.models}, "--model") if model else None
+    active_ids = {m.id for m in cfg.models if not m.deprecated}
+    only_models = _require_known(model, active_ids, "--model") if model else None
     only_episodes = _require_known(episode, {e.ep_id for e in episodes}, "--episode") if episode else None
 
     paths = runner_mod.RunPaths.for_root(_root() / "results")
