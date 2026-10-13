@@ -4,16 +4,19 @@ import pytest
 from benchmark.storage import (
     StorageError,
     append_call,
+    append_calls,
     append_jsonl,
     append_response,
     call_shard,
     dedup_index,
     errored_keys,
     find_call,
+    has_calls,
     hash_prompt,
     read_calls,
     read_jsonl,
     read_response,
+    reset_calls,
     safe_model_id,
     sanitize_error,
 )
@@ -142,9 +145,28 @@ def test_find_call_scans_raw_dir_across_shards(tmp_path):
     assert find_call(tmp_path, "absent") is None
 
 
-def test_find_call_accepts_records_iterable():
-    records = [{"call_id": "c1", "trial": 0}, {"call_id": "c1", "trial": 1}]
-    assert find_call(records, "c1") == {"call_id": "c1", "trial": 1}
+def test_append_calls_skips_known_ids_and_writes_each_shard_once(tmp_path):
+    append_call(tmp_path, {"call_id": "a1", "model": "model-a"})
+    existing = {"a1"}
+    appended = append_calls(tmp_path, [
+        {"call_id": "a1", "model": "model-a"},
+        {"call_id": "a2", "model": "model-a"},
+        {"call_id": "a2", "model": "model-a"},
+        {"call_id": "b1", "model": "model-b"},
+    ], existing_ids=existing)
+    assert appended == 2
+    assert existing == {"a1", "a2", "b1"}
+    assert [r["call_id"] for r in read_calls(tmp_path)] == ["a1", "a2", "b1"]
+
+
+def test_has_calls_and_reset_calls_cover_legacy_file_and_shards(tmp_path):
+    assert not has_calls(tmp_path)
+    append_jsonl(tmp_path / "calls.jsonl", {"call_id": "l1", "model": "m"})
+    assert has_calls(tmp_path)
+    append_call(tmp_path, {"call_id": "s1", "model": "m"})
+    reset_calls(tmp_path)
+    assert not has_calls(tmp_path)
+    assert list(read_calls(tmp_path)) == []
 
 
 def test_dedup_index_built_from_calls():

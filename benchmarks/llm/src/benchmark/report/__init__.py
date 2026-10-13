@@ -8,7 +8,7 @@ from pathlib import Path
 from .. import jev, pricing
 from ..corpus import Episode
 from ..storage import read_calls
-from ..variants import record_cell
+from ..variants import DEFAULT_CELL, record_cell
 from .aggregate import (
     _aggregate,
     _dedup_last_write_wins,
@@ -65,7 +65,7 @@ def report_paths(results_dir: Path, prompt_variant: str, addressing_mode: str) -
     """Per-(variant, mode) cell output paths; the default cell keeps the
     pre-existing report.md path, other cells get a suffixed path so they
     don't clobber each other's charts."""
-    if prompt_variant == "detection" and addressing_mode == "timestamps":
+    if (prompt_variant, addressing_mode) == DEFAULT_CELL:
         return results_dir / "report.md", results_dir / "report_assets"
     suffix = f"{prompt_variant}-{addressing_mode}"
     return results_dir / f"report-{suffix}.md", results_dir / f"report_assets-{suffix}"
@@ -95,29 +95,25 @@ def render(
     (variant, mode) cell never blends them into one set of numbers; render
     once per cell to see each side of an A/B.
     """
-    title_suffixes = []
-    if prompt_variant != "detection":
-        title_suffixes.append(f"prompt variant: {prompt_variant}")
-    if addressing_mode != "timestamps":
-        title_suffixes.append(f"addressing mode: {addressing_mode}")
+    # (label, value, cli flag) for each cell dimension that is not the default.
+    non_default = [
+        (label, value, flag)
+        for (label, value, flag), default in zip(
+            (("prompt variant", prompt_variant, "--prompt-variant"),
+             ("addressing mode", addressing_mode, "--addressing-mode")),
+            DEFAULT_CELL,
+        )
+        if value != default
+    ]
     title = "# MinusPod LLM Benchmark Report"
-    if title_suffixes:
-        title += " (" + ", ".join(title_suffixes) + ")"
+    if non_default:
+        title += " (" + ", ".join(f"{label}: {value}" for label, value, _ in non_default) + ")"
 
     all_calls = list(read_calls(raw_dir))
     raw_calls = [r for r in all_calls if record_cell(r) == (prompt_variant, addressing_mode)]
     if not raw_calls:
-        run_hint = "benchmark run"
-        if prompt_variant != "detection":
-            run_hint += f" --prompt-variant {prompt_variant}"
-        if addressing_mode != "timestamps":
-            run_hint += f" --addressing-mode {addressing_mode}"
-        mode_notes = []
-        if prompt_variant != "detection":
-            mode_notes.append(f"prompt variant '{prompt_variant}'")
-        if addressing_mode != "timestamps":
-            mode_notes.append(f"addressing mode '{addressing_mode}'")
-        mode_note = f" for {' and '.join(mode_notes)}" if mode_notes else ""
+        run_hint = " ".join(["benchmark run", *(f"{flag} {value}" for _, value, flag in non_default)])
+        mode_note = " for " + " and ".join(f"{label} '{value}'" for label, value, _ in non_default) if non_default else ""
         output_path.write_text(f"{title}\n\nNo benchmark data yet{mode_note}. Run `{run_hint}` first.\n")
         return
     mixed = campaign_mixing(raw_calls)

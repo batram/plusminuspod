@@ -16,6 +16,8 @@ logger = logging.getLogger(__name__)
 PROMPT_VARIANTS = ("detection", "segmentation")
 DEFAULT_VARIANT = "detection"
 ADDRESSING_MODES = ("timestamps", "segment_ids")
+DEFAULT_ADDRESSING_MODE = "timestamps"
+DEFAULT_CELL = (DEFAULT_VARIANT, DEFAULT_ADDRESSING_MODE)
 SEGMENTATION_PROMPT_PATH = Path(__file__).resolve().parents[2] / "prompts" / "segmentation-v1.txt"
 # main_content/teaser/transition fail repair_segment_category; intro/outro/recap
 # are dropped here too, so merged rows stay comparable to the detection prompt.
@@ -30,7 +32,7 @@ def validate_variant(name: str) -> None:
 def record_cell(record: dict) -> tuple[str, str]:
     """A call/episode-result record's (prompt_variant, addressing_mode) cell,
     defaulting missing fields the way pre-A/B-test rows were written."""
-    return record.get("prompt_variant", DEFAULT_VARIANT), record.get("addressing_mode", "timestamps")
+    return record.get("prompt_variant", DEFAULT_VARIANT), record.get("addressing_mode", DEFAULT_ADDRESSING_MODE)
 
 
 def finalize_prompt(prompt: str) -> str:

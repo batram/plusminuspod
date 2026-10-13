@@ -43,7 +43,7 @@ def _make_source(tmp_path: Path) -> Path:
     return src
 
 
-def test_inserts_prompt_variant_after_addressing_mode(tmp_path):
+def test_stamps_prompt_variant_on_imported_rows(tmp_path):
     src = _make_source(tmp_path)
     dest = tmp_path / "dest_raw"
 
@@ -54,10 +54,7 @@ def test_inserts_prompt_variant_after_addressing_mode(tmp_path):
 
     rows = list(read_calls(dest))
     assert len(rows) == 2
-    for row in rows:
-        keys = list(row.keys())
-        assert row["prompt_variant"] == "segmentation"
-        assert keys.index("prompt_variant") == keys.index("addressing_mode") + 1
+    assert all(row["prompt_variant"] == "segmentation" for row in rows)
 
 
 def test_existing_prompt_variant_is_overwritten_by_stamp(tmp_path):
@@ -76,11 +73,7 @@ def test_existing_prompt_variant_is_overwritten_by_stamp(tmp_path):
     rows_added, _ = import_calls.import_calls(src, "segmentation", dest_raw=dest)
     assert rows_added == 1
 
-    row = list(read_calls(dest))[0]
-    keys = list(row.keys())
-    assert row["prompt_variant"] == "segmentation"
-    assert keys.count("prompt_variant") == 1
-    assert keys.index("prompt_variant") == keys.index("addressing_mode") + 1
+    assert list(read_calls(dest))[0]["prompt_variant"] == "segmentation"
 
 
 def test_import_is_idempotent(tmp_path):

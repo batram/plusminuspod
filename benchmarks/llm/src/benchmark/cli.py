@@ -6,7 +6,7 @@ import dataclasses
 import hashlib
 import logging
 import shutil
-from collections import Counter, defaultdict
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -23,14 +23,15 @@ from .config import BenchmarkConfig, load as load_config
 from .runner import build_work_list, precompute_prompt_hashes
 from .storage import (
     StorageError,
-    append_call,
-    call_shard,
+    append_calls,
     calls_dir,
     find_call,
+    has_calls,
     hash_prompt,
     read_calls,
     read_jsonl,
     read_response,
+    reset_calls,
     scan_calls,
 )
 
@@ -108,7 +109,7 @@ def _resolve_prompt_for_variant(prompt_variant: str, snapshot: Path | None, addr
             raise typer.Exit(2)
         system_prompt = variants.segmentation_system_prompt()
         sha8 = hashlib.sha256(system_prompt.encode()).hexdigest()[:8]
-        return system_prompt, f"segmentation-v1.txt (sha256:{sha8})"
+        return system_prompt, f"{variants.SEGMENTATION_PROMPT_PATH.name} (sha256:{sha8})"
     system_prompt, prompt_source = _resolve_prompt(snapshot)
     return _with_id_mode_section(system_prompt, addressing_mode), prompt_source
 
@@ -257,19 +258,8 @@ def run(
         typer.echo("no corpus episodes; run `benchmark capture` first", err=True)
         raise typer.Exit(1)
 
-    # --model/--episode narrow only the work list the runner executes; cfg and
-    # episodes stay the full corpus so the report render and derive_episode_results
-    # below don't drop other episodes or lose track of deprecated models.
-    run_cfg = cfg
-    run_episodes = episodes
-
-    if model:
-        model_set = _require_known(model, {m.id for m in cfg.models}, "--model")
-        run_cfg = dataclasses.replace(cfg, models=[m for m in cfg.models if m.id in model_set])
-
-    if episode:
-        episode_set = _require_known(episode, {e.ep_id for e in episodes}, "--episode")
-        run_episodes = [e for e in episodes if e.ep_id in episode_set]
+    only_models = _require_known(model, {m.id for m in cfg.models}, "--model") if model else None
+    only_episodes = _require_known(episode, {e.ep_id for e in episodes}, "--episode") if episode else None
 
     paths = runner_mod.RunPaths.for_root(_root() / "results")
     snapshots_dir = _root() / "data" / "pricing_snapshots"
@@ -279,24 +269,21 @@ def run(
 
     if force:
         typer.echo("WARNING: --force will reset existing calls; abort if unintended.")
-        legacy = paths.raw / "calls.jsonl"
-        if legacy.exists():
-            legacy.unlink()
-        if paths.calls_dir.exists():
-            shutil.rmtree(paths.calls_dir)
+        reset_calls(paths.raw)
 
     if dry_run:
         units, skipped = _preview(
-            run_cfg, run_episodes, paths=paths, system_prompt=system_prompt,
+            cfg, episodes, paths=paths, system_prompt=system_prompt,
             include_errored=retry_errors, addressing_mode=addressing_mode, prompt_variant=prompt_variant,
+            only_models=only_models, only_episodes=only_episodes,
         )
         typer.echo(f"dry-run: {len(units)} calls would execute, {skipped} skipped (already done)")
         raise typer.Exit(0)
 
     stats = asyncio.run(runner_mod.run(
-        run_cfg, run_episodes, paths=paths, pricing_snapshot=snap, system_prompt=system_prompt,
+        cfg, episodes, paths=paths, pricing_snapshot=snap, system_prompt=system_prompt,
         include_errored=retry_errors, addressing_mode=addressing_mode, prompt_variant=prompt_variant,
-        all_episodes=episodes,
+        only_models=only_models, only_episodes=only_episodes,
     ))
     typer.echo(f"run complete: total={stats.total_units} skipped={stats.skipped} completed={stats.completed} errored={stats.errored}")
 
@@ -443,34 +430,20 @@ def _migrate_calls(raw_dir: Path) -> _MigrateCallsResult:
     appended again, so a rerun after an interrupted prior pass is safe.
     """
     legacy_rows = list(read_jsonl(raw_dir / "calls.jsonl"))
-
-    by_model: dict[str, list[dict]] = defaultdict(list)
-    for rec in legacy_rows:
-        by_model[rec["model"]].append(rec)
-
-    appended = skipped = 0
-    for model, recs in by_model.items():
-        shard = call_shard(raw_dir, model)
-        existing_ids = {r.get("call_id") for r in read_jsonl(shard)}
-        for rec in recs:
-            if rec.get("call_id") in existing_ids:
-                skipped += 1
-                continue
-            append_call(raw_dir, rec)
-            existing_ids.add(rec.get("call_id"))
-            appended += 1
-
-    all_ids = [
+    shard_ids = [
         r.get("call_id")
         for shard in sorted(calls_dir(raw_dir).glob("*.jsonl"))
         for r in read_jsonl(shard)
     ]
-    duplicates = [cid for cid, n in Counter(all_ids).items() if n > 1]
+    duplicates = [cid for cid, n in Counter(shard_ids).items() if n > 1]
     if duplicates:
         raise StorageError(f"{len(duplicates)} call_id(s) duplicated across shards; aborting before delete")
 
+    existing_ids = set(shard_ids)
+    appended = append_calls(raw_dir, legacy_rows, existing_ids=existing_ids)
     return _MigrateCallsResult(
-        legacy_rows=len(legacy_rows), appended=appended, skipped=skipped, total_shard_rows=len(all_ids),
+        legacy_rows=len(legacy_rows), appended=appended, skipped=len(legacy_rows) - appended,
+        total_shard_rows=len(existing_ids),
     )
 
 
@@ -627,8 +600,7 @@ def rotate_raw_cmd(
     """
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     src = _root() / "results" / "raw"
-    has_calls = (src / "calls.jsonl").is_file() or any((src / "calls").glob("*.jsonl"))
-    if not src.is_dir() or not has_calls:
+    if not src.is_dir() or not has_calls(src):
         typer.echo("no results/raw to rotate", err=True)
         raise typer.Exit(1)
     dst = _root() / "results" / "archive" / today / "raw"
@@ -865,14 +837,17 @@ def _echo_jev_table(scores, *, est_tokens: int, oracle: str,
 
 
 
-def _preview(cfg, episodes, *, paths, system_prompt, include_errored=False, addressing_mode="timestamps", prompt_variant="detection"):
+def _preview(cfg, episodes, *, paths, system_prompt, include_errored=False, addressing_mode="timestamps",
+             prompt_variant="detection", only_models=None, only_episodes=None):
     hashes = precompute_prompt_hashes(
         cfg, episodes, system_prompt=system_prompt, addressing_mode=addressing_mode, prompt_variant=prompt_variant,
+        only_models=only_models, only_episodes=only_episodes,
     )
     completed, err_keys = scan_calls(read_calls(paths.raw))
     units, skipped = build_work_list(
         cfg, episodes, completed=completed, prompt_hashes=hashes,
         include_errored=include_errored, error_keys=err_keys,
+        only_models=only_models, only_episodes=only_episodes,
     )
     return units, skipped
 

@@ -81,11 +81,7 @@ def _max_tokens_summary(calls: list[dict]) -> str:
     if len(counts) == 1:
         return str(next(iter(counts)))
     total = sum(counts.values())
-    parts = []
-    for i, (value, n) in enumerate(sorted(counts.items())):
-        pct = f"{n * 100.0 / total:.0f}%"
-        parts.append(f"{value} ({pct} of calls)" if i == 0 else f"{value} ({pct})")
-    return ", ".join(parts)
+    return ", ".join(f"{value} ({n * 100.0 / total:.0f}% of calls)" for value, n in sorted(counts.items()))
 
 
 def _group_by_unit(calls: list[dict]) -> dict[tuple, list[dict]]:
@@ -603,13 +599,17 @@ def _ci_half_width(values: list[float]) -> float:
     return _t_crit(n - 1, two_sided=True) * metrics.trial_stdev(values) / math.sqrt(n)
 
 
+def _paired_diffs(a: dict[str, float], b: dict[str, float]) -> list[float]:
+    """(a - b) over the keys a and b share, in a's order."""
+    return [a[k] - b[k] for k in a if k in b]
+
+
 def _paired_diff_stats(a: dict[str, float], b: dict[str, float]) -> tuple[float, float, int] | None:
     """Mean, sample stdev, and count of (a - b) over the keys a and b share.
     None when fewer than 2 shared keys (episodes)."""
-    keys = [k for k in a if k in b]
-    if len(keys) < 2:
+    diffs = _paired_diffs(a, b)
+    if len(diffs) < 2:
         return None
-    diffs = [a[k] - b[k] for k in keys]
     return statistics.fmean(diffs), statistics.stdev(diffs), len(diffs)
 
 

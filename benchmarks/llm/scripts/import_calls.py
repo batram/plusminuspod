@@ -9,24 +9,13 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 sys.path.insert(0, str(REPO_ROOT / "benchmarks" / "llm" / "src"))
 
-from benchmark.storage import append_call, dump_line, read_calls, read_jsonl, safe_model_id  # noqa: E402
+from benchmark.storage import append_calls, dump_line, read_calls, read_jsonl, safe_model_id  # noqa: E402
 
 DEST_RAW = Path(__file__).resolve().parents[1] / "results" / "raw"
 
 
 def _load_call_ids(path: Path) -> set[str]:
     return {rec["call_id"] for rec in read_jsonl(path)}
-
-
-def _insert_prompt_variant(row: dict, variant: str) -> dict:
-    out = {}
-    for key, value in row.items():
-        if key == "prompt_variant":
-            continue  # the stamped value below always wins over a source row's own
-        out[key] = value
-        if key == "addressing_mode":
-            out["prompt_variant"] = variant
-    return out
 
 
 def import_calls(from_raw: Path, variant: str, dest_raw: Path = DEST_RAW) -> tuple[int, dict[str, int]]:
@@ -45,12 +34,10 @@ def import_calls(from_raw: Path, variant: str, dest_raw: Path = DEST_RAW) -> tup
             continue
         if "addressing_mode" not in row:
             raise ValueError(f"{call_id}: row has no addressing_mode field")
-        new_rows.append(_insert_prompt_variant(row, variant))
+        new_rows.append({**row, "prompt_variant": variant})
         new_ids_by_model.setdefault(row["model"], set()).add(call_id)
 
-    for row in new_rows:
-        append_call(dest_raw, row)
-
+    append_calls(dest_raw, new_rows, existing_ids=existing_ids)
     shard_counts = _import_shards(from_raw, dest_raw, new_ids_by_model)
     return len(new_rows), shard_counts
 

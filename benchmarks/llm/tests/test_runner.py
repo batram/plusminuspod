@@ -74,6 +74,50 @@ def test_build_work_list_includes_errored_when_requested(minimal_cfg, make_episo
     assert len(units) == 2
 
 
+def test_build_work_list_narrows_to_selected_models_and_episodes(minimal_cfg, make_episode):
+    ep_a, ep_b = make_episode("ep-a", n_windows=1), make_episode("ep-b", n_windows=1)
+    cfg = dataclasses.replace(minimal_cfg, models=[
+        minimal_cfg.models[0], dataclasses.replace(minimal_cfg.models[0], id="m2"),
+    ])
+    hashes = runner.precompute_prompt_hashes(cfg, [ep_a, ep_b], system_prompt="S")
+    units, skipped = runner.build_work_list(
+        cfg, [ep_a, ep_b], completed=set(), prompt_hashes=hashes,
+        only_models={"m2"}, only_episodes={"ep-b"},
+    )
+    assert skipped == 0
+    assert {(u.model_id, u.episode_id) for u in units} == {("m2", "ep-b")}
+
+
+def test_run_resends_after_a_provider_pause_outside_the_semaphores(
+        tmp_path, minimal_cfg, make_episode, pricing_snapshot, monkeypatch):
+    """A paused call releases its slot, waits, and is sent again."""
+    events: list[str] = []
+    attempts = {"n": 0}
+
+    async def fake_call(**kwargs):
+        attempts["n"] += 1
+        events.append("call")
+        if attempts["n"] == 1:
+            raise runner.llm.ProviderPausedError("openrouter")
+        return LLMResponse(text="[]", input_tokens=1, output_tokens=1,
+                           json_format_used="native", underlying_provider="openrouter", stop_reason="stop")
+
+    async def fake_wait(provider_name, **kwargs):
+        events.append("wait")
+
+    monkeypatch.setattr(runner.llm, "call_with_retry", fake_call)
+    monkeypatch.setattr(runner.llm, "wait_for_pause", fake_wait)
+    cfg = dataclasses.replace(minimal_cfg, run=dataclasses.replace(minimal_cfg.run, trials=1))
+    paths = runner.RunPaths.for_root(tmp_path)
+    stats = asyncio.run(runner.run(
+        cfg, [make_episode(n_windows=1)], paths=paths, pricing_snapshot=pricing_snapshot, system_prompt="S",
+    ))
+
+    assert (stats.completed, stats.errored) == (1, 0)
+    assert events == ["wait", "call", "wait", "call"]
+    assert all(not r.get("error") for r in read_calls(paths.raw))
+
+
 def test_call_id_is_deterministic_shape():
     unit = runner.WorkUnit(model_id="anthropic/claude-sonnet-4.6", provider_name="openrouter", episode_id="ep-001", trial=0, window_index=2)
     cid = runner._call_id(unit, "sha256:abcdef0123456789")

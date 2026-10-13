@@ -11,12 +11,13 @@ from benchmark.storage import append_call
 from tests.test_addressing_mode import CALL_TEMPLATE, SEGMENTS
 
 
+def _render(cfg, episodes, raw_dir, pricing_snapshot, out):
+    compare_mod.render(cfg=cfg, episodes=episodes, raw_dir=raw_dir, pricing_snapshot=pricing_snapshot, output_path=out)
+
+
 def test_compare_with_no_data_at_all(tmp_path, minimal_cfg, pricing_snapshot):
     out = tmp_path / "comparison.md"
-    compare_mod.render(
-        cfg=minimal_cfg, episodes=[], raw_dir=tmp_path,
-        pricing_snapshot=pricing_snapshot, output_path=out,
-    )
+    _render(minimal_cfg, [], tmp_path, pricing_snapshot, out)
     assert "No benchmark data yet" in out.read_text()
 
 
@@ -43,10 +44,7 @@ def test_compare_pairs_segmentation_segment_ids_against_detection_timestamps(
     })
 
     out = tmp_path / "comparison.md"
-    compare_mod.render(
-        cfg=minimal_cfg, episodes=[ep], raw_dir=tmp_path,
-        pricing_snapshot=pricing_snapshot, output_path=out,
-    )
+    _render(minimal_cfg, [ep], tmp_path, pricing_snapshot, out)
     text = out.read_text()
 
     assert "detection/timestamps" in text
@@ -75,10 +73,7 @@ def test_compare_model_in_only_one_cell_is_omitted(
     })
 
     out = tmp_path / "comparison.md"
-    compare_mod.render(
-        cfg=minimal_cfg, episodes=[ep], raw_dir=tmp_path,
-        pricing_snapshot=pricing_snapshot, output_path=out,
-    )
+    _render(minimal_cfg, [ep], tmp_path, pricing_snapshot, out)
     text = out.read_text()
     assert "`m1`" not in text
 
@@ -113,10 +108,7 @@ def test_compare_cost_per_episode_is_divided_by_cell_episode_count(
     })
 
     out = tmp_path / "comparison.md"
-    compare_mod.render(
-        cfg=minimal_cfg, episodes=[ep1, ep2], raw_dir=tmp_path,
-        pricing_snapshot=pricing_snapshot, output_path=out,
-    )
+    _render(minimal_cfg, [ep1, ep2], tmp_path, pricing_snapshot, out)
     cells = _row_cells(out.read_text(), "m1")
     detection_cost = cells[5]   # detection/timestamps cost/ep (2 episodes)
     segmentation_cost = cells[13]  # segmentation/segment_ids cost/ep (1 episode)
@@ -140,10 +132,7 @@ def test_compare_header_notes_cost_per_episode_divergence_from_per_cell_report(
     })
 
     out = tmp_path / "comparison.md"
-    compare_mod.render(
-        cfg=minimal_cfg, episodes=[ep], raw_dir=tmp_path,
-        pricing_snapshot=pricing_snapshot, output_path=out,
-    )
+    _render(minimal_cfg, [ep], tmp_path, pricing_snapshot, out)
     text = out.read_text()
     assert "corpus-wide total" in text
     assert "not directly comparable" in text
@@ -169,10 +158,7 @@ def test_compare_header_notes_max_tokens_per_cell(
     })
 
     out = tmp_path / "comparison.md"
-    compare_mod.render(
-        cfg=minimal_cfg, episodes=[ep], raw_dir=tmp_path,
-        pricing_snapshot=pricing_snapshot, output_path=out,
-    )
+    _render(minimal_cfg, [ep], tmp_path, pricing_snapshot, out)
     text = out.read_text()
     assert "detection/timestamps 4096" in text
     assert "segmentation/segment_ids 16384" in text
@@ -193,10 +179,7 @@ def test_compare_excludes_deprecated_models(
         })
 
     out = tmp_path / "comparison.md"
-    compare_mod.render(
-        cfg=minimal_cfg, episodes=[ep], raw_dir=tmp_path,
-        pricing_snapshot=pricing_snapshot, output_path=out,
-    )
+    _render(minimal_cfg, [ep], tmp_path, pricing_snapshot, out)
     assert "m-old" not in out.read_text()
 
 
@@ -218,10 +201,7 @@ def test_compare_renders_numeric_delta_and_pvalue_with_two_shared_episodes(
         })
 
     out = tmp_path / "comparison.md"
-    compare_mod.render(
-        cfg=minimal_cfg, episodes=[ep1, ep2], raw_dir=tmp_path,
-        pricing_snapshot=pricing_snapshot, output_path=out,
-    )
+    _render(minimal_cfg, [ep1, ep2], tmp_path, pricing_snapshot, out)
     delta_cell, p_cell = _row_cells(out.read_text(), "m1")[-2:]
     assert delta_cell != "n/a"
     assert p_cell != "n/a"

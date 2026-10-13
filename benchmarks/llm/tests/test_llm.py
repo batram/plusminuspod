@@ -85,134 +85,89 @@ def test_non_429_is_not_an_account_rate_limit():
 
 # --- call_with_retry: pause behavior (fake_call raises the parsed error directly) ---
 
-def test_pauses_until_resets_at_plus_slack_then_succeeds(monkeypatch):
+_OK = llm.LLMResponse(text="ok", input_tokens=1, output_tokens=1,
+                      json_format_used="native", underlying_provider="p")
+
+
+def _rate_limited_once(monkeypatch, *, resets_at=None, retry_after=None, calls=None):
+    """Patch llm.call to raise AccountRateLimitError on the first call and
+    succeed afterwards; `calls` collects the clock time of each attempt."""
+    seen = calls if calls is not None else []
+
+    async def fake_call(**kwargs):
+        seen.append(kwargs)
+        if len(seen) == 1:
+            raise llm.AccountRateLimitError("rate limited", resets_at=resets_at,
+                                             retry_after=retry_after, reason="assistant_rate_limit")
+        return _OK
+
+    monkeypatch.setattr(llm, "call", fake_call)
+    return seen
+
+
+def _call(clock, state, **overrides):
+    async def run():
+        kwargs = {"max_retries": 0, "pause_state": state, "now_fn": clock.now, "sleep_fn": clock.sleep, **overrides}
+        return await llm.call_with_retry(**await _call_kwargs(**kwargs))
+    return asyncio.run(run())
+
+
+def test_account_rate_limit_records_pause_and_raises_without_sleeping(monkeypatch):
+    """The caller owns the wait: call_with_retry records resets_at + slack on
+    the shared state and raises, so the concurrency slot can be released."""
     clock = FakeClock()
     resets_at = clock.t + 100.0
-    calls = []
-
-    async def fake_call(**kwargs):
-        calls.append(clock.now())
-        if len(calls) == 1:
-            raise llm.AccountRateLimitError("rate limited", resets_at=resets_at,
-                                             retry_after=30.0, reason="assistant_rate_limit")
-        return llm.LLMResponse(text="ok", input_tokens=1, output_tokens=1,
-                                json_format_used="native", underlying_provider="anthropic_direct")
-
-    monkeypatch.setattr(llm, "call", fake_call)
+    calls = _rate_limited_once(monkeypatch, resets_at=resets_at, retry_after=30.0)
     state = llm.ProviderPauseState()
 
-    async def run():
-        return await llm.call_with_retry(
-            **await _call_kwargs(max_retries=0, pause_state=state, now_fn=clock.now, sleep_fn=clock.sleep),
-        )
+    with pytest.raises(llm.ProviderPausedError):
+        _call(clock, state)
+    assert len(calls) == 1
+    assert clock.t == 1_000_000.0
+    assert state.resume_at("anthropic_direct") == resets_at + llm.ACCOUNT_RESET_SLACK_SECONDS
 
-    resp = asyncio.run(run())
-    assert resp.text == "ok"
+
+def test_paused_provider_is_not_sent_to_again_until_resumed(monkeypatch):
+    clock = FakeClock()
+    calls = _rate_limited_once(monkeypatch, resets_at=clock.t + 100.0)
+    state = llm.ProviderPauseState()
+    with pytest.raises(llm.ProviderPausedError):
+        _call(clock, state)
+    with pytest.raises(llm.ProviderPausedError):
+        _call(clock, state)
+    assert len(calls) == 1
+    clock.t = state.resume_at("anthropic_direct")
+    assert _call(clock, state).text == "ok"
     assert len(calls) == 2
-    # Resumed at resets_at + 15s, not before.
-    assert clock.t >= resets_at + llm.ACCOUNT_RESET_SLACK_SECONDS
-    assert calls[1] >= resets_at + llm.ACCOUNT_RESET_SLACK_SECONDS
 
 
-def test_pause_does_not_consume_retry_budget(monkeypatch):
-    """max_retries=0 would normally fail any retried call; the paused resend
-    still succeeds, proving the pause attempt isn't counted."""
+@pytest.mark.parametrize("resets_at_offset, retry_after, expected_offset", [
+    (None, 45.0, 45.0),
+    (None, None, llm.ACCOUNT_RESET_DEFAULT_SECONDS),
+])
+def test_resume_time_falls_back_to_retry_after_then_default(monkeypatch, resets_at_offset, retry_after,
+                                                            expected_offset):
     clock = FakeClock()
-    resets_at = clock.t + 10.0
-    attempts = {"n": 0}
-
-    async def fake_call(**kwargs):
-        attempts["n"] += 1
-        if attempts["n"] == 1:
-            raise llm.AccountRateLimitError("rate limited", resets_at=resets_at,
-                                             retry_after=None, reason="assistant_rate_limit")
-        return llm.LLMResponse(text="ok", input_tokens=1, output_tokens=1,
-                                json_format_used="native", underlying_provider="p")
-
-    monkeypatch.setattr(llm, "call", fake_call)
-
-    async def run():
-        return await llm.call_with_retry(
-            **await _call_kwargs(max_retries=0, now_fn=clock.now, sleep_fn=clock.sleep,
-                                  pause_state=llm.ProviderPauseState()),
-        )
-
-    resp = asyncio.run(run())
-    assert resp.text == "ok"
-    assert attempts["n"] == 2
-
-
-def test_no_resets_at_falls_back_to_retry_after(monkeypatch):
-    clock = FakeClock()
-    calls = []
-
-    async def fake_call(**kwargs):
-        calls.append(clock.now())
-        if len(calls) == 1:
-            raise llm.AccountRateLimitError("rate limited", resets_at=None,
-                                             retry_after=45.0, reason="assistant_rate_limit")
-        return llm.LLMResponse(text="ok", input_tokens=1, output_tokens=1,
-                                json_format_used="native", underlying_provider="p")
-
-    monkeypatch.setattr(llm, "call", fake_call)
-    start = clock.t
-
-    async def run():
-        return await llm.call_with_retry(
-            **await _call_kwargs(max_retries=0, now_fn=clock.now, sleep_fn=clock.sleep,
-                                  pause_state=llm.ProviderPauseState()),
-        )
-
-    asyncio.run(run())
-    assert calls[1] == pytest.approx(start + 45.0)
-
-
-def test_no_resets_at_and_no_retry_after_falls_back_to_default(monkeypatch):
-    clock = FakeClock()
-    calls = []
-
-    async def fake_call(**kwargs):
-        calls.append(clock.now())
-        if len(calls) == 1:
-            raise llm.AccountRateLimitError("rate limited", resets_at=None,
-                                             retry_after=None, reason="assistant_rate_limit")
-        return llm.LLMResponse(text="ok", input_tokens=1, output_tokens=1,
-                                json_format_used="native", underlying_provider="p")
-
-    monkeypatch.setattr(llm, "call", fake_call)
-    start = clock.t
-
-    async def run():
-        return await llm.call_with_retry(
-            **await _call_kwargs(max_retries=0, now_fn=clock.now, sleep_fn=clock.sleep,
-                                  pause_state=llm.ProviderPauseState()),
-        )
-
-    asyncio.run(run())
-    assert calls[1] == pytest.approx(start + llm.ACCOUNT_RESET_DEFAULT_SECONDS)
+    _rate_limited_once(monkeypatch, resets_at=None, retry_after=retry_after)
+    state = llm.ProviderPauseState()
+    with pytest.raises(llm.ProviderPausedError):
+        _call(clock, state)
+    assert state.resume_at("anthropic_direct") == pytest.approx(clock.t + expected_offset)
 
 
 def test_wait_above_cap_records_error(monkeypatch):
     clock = FakeClock()
-    resets_at = clock.t + 100.0  # minus slack, wait = 115s
 
     async def fake_call(**kwargs):
-        raise llm.AccountRateLimitError("rate limited", resets_at=resets_at,
+        raise llm.AccountRateLimitError("rate limited", resets_at=clock.t + 100.0,
                                          retry_after=None, reason="assistant_rate_limit")
 
     monkeypatch.setattr(llm, "call", fake_call)
-
-    async def run():
-        return await llm.call_with_retry(
-            **await _call_kwargs(max_retries=0, now_fn=clock.now, sleep_fn=clock.sleep,
-                                  pause_state=llm.ProviderPauseState(),
-                                  max_rate_limit_pause_seconds=60.0),
-        )
-
+    state = llm.ProviderPauseState()
     with pytest.raises(llm.AccountRateLimitError):
-        asyncio.run(run())
-    # Never paused: the clock did not move.
-    assert clock.t == 1_000_000.0
+        _call(clock, state, max_rate_limit_pause_seconds=60.0)
+    # Over the cap: the error propagates and no pause is recorded.
+    assert state.resume_at("anthropic_direct") == 0.0
 
 
 def test_old_backoff_path_unaffected_by_account_rate_limit_handling(monkeypatch):
@@ -231,62 +186,13 @@ def test_old_backoff_path_unaffected_by_account_rate_limit_handling(monkeypatch)
         attempts["n"] += 1
         if attempts["n"] <= 2:
             raise llm.LLMTransientError("rate limited by upstream provider")
-        return llm.LLMResponse(text="ok", input_tokens=1, output_tokens=1,
-                                json_format_used="native", underlying_provider="p")
+        return _OK
 
     monkeypatch.setattr(llm, "call", fake_call)
-
-    async def run():
-        return await llm.call_with_retry(
-            **await _call_kwargs(max_retries=2, now_fn=clock.now, sleep_fn=fake_sleep,
-                                  pause_state=llm.ProviderPauseState()),
-        )
-
-    resp = asyncio.run(run())
+    resp = _call(clock, llm.ProviderPauseState(), max_retries=2, sleep_fn=fake_sleep)
     assert resp.text == "ok"
     assert attempts["n"] == 3
     assert sleeps == [2.0, 4.0]
-
-
-def test_concurrent_calls_on_same_provider_share_the_pause(monkeypatch):
-    """One call hits the account limit and registers the provider's pause;
-    a second, concurrent call on the same provider must wait for that same
-    resume time rather than sending immediately."""
-    clock = FakeClock()
-    resets_at = clock.t + 200.0
-    state = llm.ProviderPauseState()
-    b_send_times: list[float] = []
-    a_attempts = {"n": 0}
-
-    async def fake_call(*, model_id, **kwargs):
-        if model_id == "model-a":
-            a_attempts["n"] += 1
-            if a_attempts["n"] == 1:
-                raise llm.AccountRateLimitError("rate limited", resets_at=resets_at,
-                                                 retry_after=None, reason="assistant_rate_limit")
-            return llm.LLMResponse(text="a-ok", input_tokens=1, output_tokens=1,
-                                    json_format_used="native", underlying_provider="p")
-        b_send_times.append(clock.now())
-        return llm.LLMResponse(text="b-ok", input_tokens=1, output_tokens=1,
-                                json_format_used="native", underlying_provider="p")
-
-    monkeypatch.setattr(llm, "call", fake_call)
-
-    async def run():
-        return await asyncio.gather(
-            llm.call_with_retry(**await _call_kwargs(
-                model_id="model-a", max_retries=0, pause_state=state,
-                now_fn=clock.now, sleep_fn=clock.sleep)),
-            llm.call_with_retry(**await _call_kwargs(
-                model_id="model-b", max_retries=0, pause_state=state,
-                now_fn=clock.now, sleep_fn=clock.sleep)),
-        )
-
-    results = asyncio.run(run())
-    assert {r.text for r in results} == {"a-ok", "b-ok"}
-    # B sent exactly once, and only once the shared pause had resolved.
-    assert len(b_send_times) == 1
-    assert b_send_times[0] >= resets_at + llm.ACCOUNT_RESET_SLACK_SECONDS
 
 
 def test_pause_logs_once_at_warning_not_on_extend(caplog):
@@ -446,7 +352,7 @@ def test_wait_for_pause_rechecks_after_extension_mid_sleep():
         await ev.wait()
 
     async def waiter():
-        await llm._wait_for_pause("p", pause_state=state, now_fn=clock.now, sleep_fn=controlled_sleep)
+        await llm.wait_for_pause("p", pause_state=state, now_fn=clock.now, sleep_fn=controlled_sleep)
         return clock.now()
 
     async def run():

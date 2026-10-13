@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import re
+import shutil
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 
@@ -85,6 +86,37 @@ def append_call(raw_dir: Path, record: dict) -> Path:
     return path
 
 
+def append_calls(raw_dir: Path, records: Iterable[dict], *, existing_ids: set[str]) -> int:
+    """Append records whose call_id is not in existing_ids, one open + fsync
+    per shard. Adds the appended ids to existing_ids; returns the count appended."""
+    by_shard: dict[Path, list[dict]] = {}
+    for rec in records:
+        if rec["call_id"] in existing_ids:
+            continue
+        existing_ids.add(rec["call_id"])
+        by_shard.setdefault(call_shard(raw_dir, rec["model"]), []).append(rec)
+    for path, recs in by_shard.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as f:
+            f.writelines(dump_line(rec) for rec in recs)
+            f.flush()
+            os.fsync(f.fileno())
+    return sum(len(recs) for recs in by_shard.values())
+
+
+def has_calls(raw_dir: Path) -> bool:
+    return (raw_dir / "calls.jsonl").is_file() or any(calls_dir(raw_dir).glob("*.jsonl"))
+
+
+def reset_calls(raw_dir: Path) -> None:
+    """Delete every call record (legacy file and shards); responses stay."""
+    (raw_dir / "calls.jsonl").unlink(missing_ok=True)
+    shutil.rmtree(calls_dir(raw_dir), ignore_errors=True)
+
+
+_migrate_nudged: set[Path] = set()
+
+
 def read_calls(raw_dir: Path) -> Iterator[dict]:
     """Every call record across the per-model shards under calls_dir(raw_dir),
     in sorted shard-name order (then within-file order). Falls back to a
@@ -92,7 +124,9 @@ def read_calls(raw_dir: Path) -> Iterator[dict]:
     its rows first."""
     legacy = raw_dir / "calls.jsonl"
     if legacy.is_file():
-        logger.warning("%s still exists; run `benchmark migrate-calls` to fold it into calls/ shards.", legacy)
+        if legacy not in _migrate_nudged:
+            _migrate_nudged.add(legacy)
+            logger.warning("%s still exists; run `benchmark migrate-calls` to fold it into calls/ shards.", legacy)
         yield from read_jsonl(legacy)
     shard_dir = calls_dir(raw_dir)
     if shard_dir.is_dir():
@@ -119,26 +153,17 @@ def _find_in_file(path: Path, call_id: str) -> dict | None:
     return found
 
 
-def _last_match(records: Iterable[dict], call_id: str) -> dict | None:
+def find_call(source: Path, call_id: str) -> dict | None:
+    """Last matching record wins, matching the report's retry semantics.
+    ``source`` is one JSONL file (e.g. a response shard) or the raw dir, whose
+    call shards and legacy calls.jsonl are scanned via read_calls."""
+    if not source.is_dir():
+        return _find_in_file(source, call_id)
     found: dict | None = None
-    for rec in records:
+    for rec in read_calls(source):
         if rec.get("call_id") == call_id:
             found = rec
     return found
-
-
-def find_call(source: Path | Iterable[dict], call_id: str) -> dict | None:
-    """Last matching record wins, matching the report's retry semantics.
-
-    ``source`` is a single JSONL file (e.g. a response shard), the raw dir
-    (call records scanned across calls/ shards + a legacy calls.jsonl via
-    read_calls), or an already-loaded iterable of records.
-    """
-    if isinstance(source, Path):
-        if source.is_dir():
-            return _last_match(read_calls(source), call_id)
-        return _find_in_file(source, call_id)
-    return _last_match(source, call_id)
 
 
 def read_response(responses_dir: Path, model_id: str, call_id: str) -> str | None:

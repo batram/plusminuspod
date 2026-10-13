@@ -17,7 +17,9 @@ from .. import pricing
 from ..corpus import Episode
 from ..storage import read_calls
 from ..variants import ADDRESSING_MODES, PROMPT_VARIANTS, record_cell
-from .aggregate import ModelStats, _aggregate, _dedup_last_write_wins, _max_tokens_summary, _paired_t_pvalue
+from .aggregate import (
+    ModelStats, _aggregate, _dedup_last_write_wins, _max_tokens_summary, _paired_diffs, _paired_t_pvalue,
+)
 
 _BASELINE_CELL = ("detection", "timestamps")
 _CANDIDATE_CELL = ("segmentation", "segment_ids")
@@ -133,11 +135,9 @@ def render(
         candidate = cells.get(_CANDIDATE_CELL, {}).get(model)
         baseline = cells.get(_BASELINE_CELL, {}).get(model)
         if candidate is not None and baseline is not None:
-            shared = [e for e in candidate.f05_per_episode if e in baseline.f05_per_episode]
-            if shared:
-                cand_avg = statistics.fmean(candidate.f05_per_episode[e] for e in shared)
-                base_avg = statistics.fmean(baseline.f05_per_episode[e] for e in shared)
-                delta_cell = f"{cand_avg - base_avg:+.3f}"
+            diffs = _paired_diffs(candidate.f05_per_episode, baseline.f05_per_episode)
+            if diffs:
+                delta_cell = f"{statistics.fmean(diffs):+.3f}"
             pvalue = _paired_t_pvalue(candidate.f05_per_episode, baseline.f05_per_episode)
             p_cell = f"{pvalue:.3f}" if pvalue is not None else "n/a"
         lines.append("| " + " | ".join([f"`{model}`"] + row + [delta_cell, p_cell]) + " |")

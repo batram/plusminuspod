@@ -87,6 +87,12 @@ class AccountRateLimitError(RuntimeError):
         self.reason = reason
 
 
+class ProviderPausedError(RuntimeError):
+    """The provider is paused (see ProviderPauseState). Raised instead of
+    sleeping so the caller can release its concurrency slot, wait with
+    wait_for_pause, and resend."""
+
+
 class ProviderPauseState:
     """Per-provider resume-at timestamp (epoch seconds), shared across every
     concurrent call for that provider. A call checks this before sending;
@@ -122,16 +128,17 @@ class ProviderPauseState:
 _default_pause_state = ProviderPauseState()
 
 
-async def _wait_for_pause(provider_name: str, *, pause_state: ProviderPauseState,
-                          now_fn, sleep_fn) -> None:
+async def wait_for_pause(provider_name: str, *, pause_state: ProviderPauseState | None = None,
+                         now_fn=time.time, sleep_fn=asyncio.sleep) -> None:
     """Block until provider_name's shared pause (if any) has resolved.
 
     Re-reads resume_at after every wake: another caller's 429 can extend the
     pause while this one sleeps, so a single fixed-duration sleep would wake
     and send too early.
     """
+    state = pause_state if pause_state is not None else _default_pause_state
     while True:
-        resume_at = pause_state.resume_at(provider_name)
+        resume_at = state.resume_at(provider_name)
         now = now_fn()
         if resume_at <= now:
             return
@@ -459,7 +466,8 @@ async def call_with_retry(
     state = pause_state if pause_state is not None else _default_pause_state
     attempt = 0
     while True:
-        await _wait_for_pause(provider.name, pause_state=state, now_fn=now_fn, sleep_fn=sleep_fn)
+        if state.resume_at(provider.name) > now_fn():
+            raise ProviderPausedError(provider.name)
         try:
             return await call(
                 provider=provider,
@@ -487,10 +495,8 @@ async def call_with_retry(
                     provider.name, wait_seconds, max_rate_limit_pause_seconds,
                 )
                 raise
-            # Paused waits never consume max_retries: the wait is the
-            # provider's own stated reset, not a retry decision.
             state.start_or_extend(provider.name, resume_at, reason=e.reason, now=now)
-            continue
+            raise ProviderPausedError(provider.name) from e
         except LLMTransientError as e:
             if attempt >= max_retries:
                 raise
