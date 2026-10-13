@@ -136,7 +136,7 @@ def render(
     active = {mid: s for mid, s in by_model.items() if mid not in deprecated_ids}
     if include_jev:
         try:
-            jev.merge_into_stats(active, episodes, cache_path=calls_path.parent / "jev_cache.json",
+            jev.merge_into_stats(active, episodes, cache_path=raw_dir / "jev_cache.json",
                                  passes=jev_passes)
         except KeyError as exc:
             logger.warning("jev rows skipped: %s", exc)

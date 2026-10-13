@@ -299,15 +299,14 @@ def test_fp_windows_table_lists_only_truthless_windows(make_episode):
 def test_native_failed_call_keeps_known_spend_and_unknown_cost_out_of_free_rankings(
         tmp_path, minimal_cfg, make_episode, pricing_snapshot):
     ep = make_episode(n_windows=1)
-    calls = tmp_path / 'calls.jsonl'
     accounting = {'known_cost_usd': '0.000042', 'request_count': 2,
                   'unknown_cost_request_count': 1, 'unknown_usage_request_count': 1,
                   'input_tokens': 1000, 'output_tokens': 5, 'cost_source': 'estimated'}
-    append_jsonl(calls, {**CALL_RECORD_TEMPLATE, 'call_id': 'c1',
-                        'error': {'type': 'NativeCallError', 'message': 'failed upstream request'},
-                        'native_accounting': accounting, 'parsed_ads': []})
+    append_call(tmp_path, {**CALL_RECORD_TEMPLATE, 'call_id': 'c1',
+                           'error': {'type': 'NativeCallError', 'message': 'failed upstream request'},
+                           'native_accounting': accounting, 'parsed_ads': []})
     output = tmp_path / 'report.md'
-    report.render(cfg=minimal_cfg, episodes=[ep], calls_path=calls,
+    report.render(cfg=minimal_cfg, episodes=[ep], raw_dir=tmp_path,
                   pricing_snapshot=pricing_snapshot, output_path=output,
                   assets_dir=tmp_path / 'assets')
     text = output.read_text()

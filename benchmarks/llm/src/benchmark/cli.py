@@ -826,7 +826,7 @@ def combined_report_cmd(
         raise typer.Exit(1)
     out = output or (_root() / "results" / "report-combined.md")
     report_mod.render(
-        cfg=cfg, episodes=episodes, calls_path=paths.calls_jsonl,
+        cfg=cfg, episodes=episodes, raw_dir=paths.raw,
         pricing_snapshot=snap,
         output_path=out, assets_dir=_root() / "results" / "report_assets",
         prompt_source=prompt_source, addressing_mode=addressing_mode, include_jev=True,
