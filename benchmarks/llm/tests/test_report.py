@@ -69,8 +69,7 @@ def test_methodology_reports_mixed_max_tokens_split(minimal_cfg, make_episode, p
     calls = [{**CALL_RECORD_TEMPLATE, "max_tokens": 4096} for _ in range(5)]
     calls += [{**CALL_RECORD_TEMPLATE, "max_tokens": 16384} for _ in range(2)]
     text = _render_methodology(minimal_cfg, [make_episode()], calls, pricing_snapshot=pricing_snapshot)
-    assert "4096 (71% of calls)" in text
-    assert "16384 (29% of calls)" in text
+    assert "4096 (71%), 16384 (29%) of calls" in text
 
 
 def test_methodology_treats_missing_max_tokens_as_legacy_default(minimal_cfg, make_episode, pricing_snapshot):

@@ -1250,7 +1250,7 @@ How each model's responses were actually parsed. Columns are extraction methods,
 Reproducibility settings used for this run. The benchmark sends the same prompts MinusPod sends in production (same system prompt, same sponsor list, same windowing) so the F1 numbers here are directly relevant to production accuracy decisions. Cost is recomputed at report time from token counts against the active pricing snapshot, so all rows compare at the same prices regardless of when the actual call ran.
 
 - Trials per (model, episode): **5**, temperature 0.0
-- max_tokens: 4096 (22% of calls), 10000 (0%), 12000 (4%), 16384 (73%)
+- max_tokens: 4096 (22%), 10000 (0%), 12000 (4%), 16384 (73%) of calls
 - response_format: json_object (with prompt-injection fallback when provider rejects native)
 - Window size: 10 min, overlap: 3 min (imported from MinusPod's create_windows)
 - Pricing snapshot: 2026-10-07T08:48:49.567770Z

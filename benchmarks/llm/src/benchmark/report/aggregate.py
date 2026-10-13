@@ -71,7 +71,7 @@ def _is_moderation_block(err) -> bool:
 
 
 def _max_tokens_summary(calls: list[dict]) -> str:
-    """Budgets present in ``calls``, as a human string. Missing field -> 4096
+    """Budgets present in ``calls`` with their share of calls. Missing field -> 4096
     (the harness default before this field was recorded)."""
     counts: dict[int, int] = defaultdict(int)
     for c in calls:
@@ -81,7 +81,7 @@ def _max_tokens_summary(calls: list[dict]) -> str:
     if len(counts) == 1:
         return str(next(iter(counts)))
     total = sum(counts.values())
-    return ", ".join(f"{value} ({n * 100.0 / total:.0f}% of calls)" for value, n in sorted(counts.items()))
+    return ", ".join(f"{value} ({n * 100.0 / total:.0f}%)" for value, n in sorted(counts.items())) + " of calls"
 
 
 def _group_by_unit(calls: list[dict]) -> dict[tuple, list[dict]]:
