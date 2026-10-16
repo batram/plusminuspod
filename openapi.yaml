@@ -7285,6 +7285,31 @@ paths:
                     Hold a long cut found only in the transcript for review
                     unless the audio shows an edit point at its edges. A feed's
                     own spliceVetoEnabled overrides this (default true).
+                audioAnalysisEnabled:
+                  type: boolean
+                  description: >-
+                    Run the local full-file audio analysis (loudness, transition,
+                    splice, silence and cue scans) in both passes. Off makes
+                    detection and validation work from the transcript alone and
+                    the splice hold never fires (default true).
+                spliceEvidenceEnabled:
+                  type: boolean
+                  description: >-
+                    Collect splice evidence inside audio analysis, a second
+                    full-file decode. Needs audioAnalysisEnabled (default true).
+                fingerprintMatchingEnabled:
+                  type: boolean
+                  description: >-
+                    Run fpcalc over the whole episode to match learned ad
+                    fingerprints and fingerprint newly learned patterns. Text
+                    pattern matching is unaffected (default true).
+                transcribeRawApiChunks:
+                  type: boolean
+                  description: >-
+                    API transcription backend, MP3 sources only: stream-copy
+                    each chunk from the original instead of decoding and
+                    normalising it first. The MINUSPOD_RAW_API_CHUNKS environment
+                    variable overrides this when set (default false).
                 differentialMeasuredCorrMax:
                   type: number
                   format: float
@@ -16155,6 +16180,38 @@ components:
           description: >-
             Hold long transcript-only cuts that show no edit point in the
             audio. A feed's own spliceVetoEnabled overrides this (default true).
+          properties:
+            value:
+              type: boolean
+            isDefault:
+              type: boolean
+        audioAnalysisEnabled:
+          type: object
+          description: Run the local full-file audio analysis in both passes (default true).
+          properties:
+            value:
+              type: boolean
+            isDefault:
+              type: boolean
+        spliceEvidenceEnabled:
+          type: object
+          description: Collect splice evidence inside audio analysis (default true).
+          properties:
+            value:
+              type: boolean
+            isDefault:
+              type: boolean
+        fingerprintMatchingEnabled:
+          type: object
+          description: Match and store fpcalc audio fingerprints (default true).
+          properties:
+            value:
+              type: boolean
+            isDefault:
+              type: boolean
+        transcribeRawApiChunks:
+          type: object
+          description: Stream-copy MP3 chunks for the API transcription backend (default false).
           properties:
             value:
               type: boolean
