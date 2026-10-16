@@ -35,6 +35,11 @@ WHISPER_CHUNK_SECONDS = 30.0
 MIN_CLIP_SECONDS = 0.1
 
 
+def raw_api_chunks_enabled() -> bool:
+    """caput patch: MINUSPOD_RAW_API_CHUNKS=true skips decode+loudnorm for MP3 sources."""
+    return os.environ.get('MINUSPOD_RAW_API_CHUNKS', '').strip().lower() in ('1', 'true', 'yes', 'on')
+
+
 def extract_audio_chunk(
     audio_path: str,
     start_time: float,
@@ -59,7 +64,19 @@ def extract_audio_chunk(
         Path to temporary chunk file, or None on failure.
         Caller is responsible for cleaning up the temp file.
     """
-    tmp = tempfile.NamedTemporaryFile(suffix='.flac' if flac else '.wav', delete=False)
+    # caput patch: on a CPU-starved host feeding a remote Whisper API, the
+    # loudnorm preprocess chain is the bottleneck (128 s per 10-min chunk on a
+    # GCP e2-micro, four in parallel blow the timeout). The hosted model does
+    # its own normalisation, so when MINUSPOD_RAW_API_CHUNKS is set and the
+    # source is MP3, stream-copy the span instead (~1 s, ~5 MB per 10 min) and
+    # upload that directly. Only the preprocess=True callers are affected.
+    raw_copy = preprocess and raw_api_chunks_enabled() and audio_path.lower().endswith('.mp3')
+
+    if raw_copy:
+        suffix = '.mp3'
+    else:
+        suffix = '.flac' if flac else '.wav'
+    tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
     output_path = tmp.name
     tmp.close()
 
@@ -77,20 +94,26 @@ def extract_audio_chunk(
             # cannot carry pictures, which is why 2.62.0's fold-in of the
             # FLAC encode surfaced it.
             '-vn',
-            '-ar', '16000',  # Whisper native sample rate
-            '-ac', '1',      # Mono
         ]
-        if preprocess:
-            cmd += ['-af', settings.PREPROCESS_AUDIO_FILTERS]
-        # FLAC for upload; otherwise uncompressed for faster processing
-        cmd += ['-c:a', 'flac' if flac else 'pcm_s16le', output_path]
+        if raw_copy:
+            cmd += ['-c:a', 'copy', output_path]
+        else:
+            cmd += [
+                '-ar', '16000',  # Whisper native sample rate
+                '-ac', '1',      # Mono
+            ]
+            if preprocess:
+                cmd += ['-af', settings.PREPROCESS_AUDIO_FILTERS]
+            # FLAC for upload; otherwise uncompressed for faster processing
+            cmd += ['-c:a', 'flac' if flac else 'pcm_s16le', output_path]
 
         # With filtering folded in, allow the same budget the standalone
         # preprocess pass had (FFMPEG_LONG_TIMEOUT floor) instead of the
         # tighter extract-only timeout. Scale by chunk length the way every
         # other ffmpeg call site does (#644): chunk size follows available GPU
         # memory, so a flat budget silently fails once chunks grow past it.
-        timeout = (FFMPEG_LONG_TIMEOUT if preprocess else FFMPEG_CHUNK_TIMEOUT) + int(duration / 12)
+        long_budget = preprocess and not raw_copy
+        timeout = (FFMPEG_LONG_TIMEOUT if long_budget else FFMPEG_CHUNK_TIMEOUT) + int(duration / 12)
         result = utils.subprocess_registry.tracked_run(cmd, capture_output=True, timeout=timeout)
 
         if result.returncode == 0 and os.path.exists(output_path):
