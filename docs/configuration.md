@@ -574,6 +574,19 @@ The per-feed **Splice check** setting, under Advanced on the feed's settings pag
 
 Turning it off gives up a safety net, so it suits a feed you have already watched cut correctly. Held ads are never lost either way: they stay in the audio and wait on the episode page.
 
+### Local processing switches
+
+Every pass below reads the whole episode with ffmpeg, fpcalc or numpy on the MinusPod host. With transcription and detection on remote services that is the only CPU-heavy work left, and on a small box (one shared vCPU, 1 GB) it is what makes a 70-minute episode take ten minutes instead of two. Each switch is global, under Settings, and defaults to the upstream behaviour.
+
+| Setting (key) | Default | What turns off |
+|---|---|---|
+| Run local audio analysis (`audio_analysis_enabled`) | on | The whole audio-analysis stage in both passes: loudness and transition detection, splice evidence, silence and cue scans. Detection and validation then run from the transcript alone, as they already do when analysis fails; the splice hold never fires because there is no calibration. |
+| Collect splice evidence (`splice_evidence_enabled`) | on | Only the splice detector, the second full decode inside audio analysis. Was already read by the code; now in the registry and the UI. |
+| Match and store audio fingerprints (`fingerprint_matching_enabled`) | on | fpcalc over the full episode against learned patterns, and fingerprinting of newly learned patterns. Text pattern matching is unaffected. |
+| Send raw MP3 chunks (`transcribe_raw_api_chunks`, Settings > Transcription) | off | For the API transcription backend and MP3 sources: each chunk is stream-copied from the original instead of decoded, normalised and re-encoded. Seconds instead of minutes per chunk on a weak CPU; hosted Whisper models normalise on their own. `MINUSPOD_RAW_API_CHUNKS` in the environment overrides the setting. |
+
+Two existing settings complete a low-CPU profile: `differential_fetch_mode=off` (no second download and decode) and `skip_second_pass` (no verification re-transcription). Loudness leveling and audio cue detection are already off by default.
+
 ## Offline Queue
 
 If your LLM or Whisper server only runs part of the day (a desktop PC that hosts Ollama, for example), episodes that arrive while it is off normally retry a few times, trip the circuit breaker, and end up permanently failed until you reprocess them by hand. The offline queue changes that: an episode that fails because the endpoint is unreachable is parked with a "queued (offline)" status instead. Every few minutes MinusPod probes the endpoint, and once it answers again the parked episodes go back into the processing queue on their own.

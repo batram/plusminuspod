@@ -37,6 +37,12 @@ interface AdDetectionSectionProps {
   onSpliceVetoEnabledChange: (value: boolean) => void;
   transcriptDifferentialEnabled: boolean;
   onTranscriptDifferentialEnabledChange: (value: boolean) => void;
+  audioAnalysisEnabled: boolean;
+  onAudioAnalysisEnabledChange: (value: boolean) => void;
+  spliceEvidenceEnabled: boolean;
+  onSpliceEvidenceEnabledChange: (value: boolean) => void;
+  fingerprintMatchingEnabled: boolean;
+  onFingerprintMatchingEnabledChange: (value: boolean) => void;
 }
 
 // Same shape as AudioCueDetectionSection's numRow, adapted to this section's
@@ -101,6 +107,12 @@ function AdDetectionSection({
   onSpliceVetoEnabledChange,
   transcriptDifferentialEnabled,
   onTranscriptDifferentialEnabledChange,
+  audioAnalysisEnabled,
+  onAudioAnalysisEnabledChange,
+  spliceEvidenceEnabled,
+  onSpliceEvidenceEnabledChange,
+  fingerprintMatchingEnabled,
+  onFingerprintMatchingEnabledChange,
 }: AdDetectionSectionProps) {
   return (
     <CollapsibleSection title="Ad Detection">
@@ -222,6 +234,45 @@ function AdDetectionSection({
           </label>
           <p className="mt-2 text-sm text-muted-foreground ml-14">
             A long cut found only in the transcript is held for review unless the audio shows an edit point at its edges. Each feed can override this.
+          </p>
+        </div>
+        <div>
+          <label className="flex items-center gap-3 cursor-pointer">
+            <ToggleSwitch
+              checked={audioAnalysisEnabled}
+              onChange={onAudioAnalysisEnabledChange}
+              ariaLabel="Run local audio analysis"
+            />
+            <span className="text-sm font-medium text-foreground">Run local audio analysis</span>
+          </label>
+          <p className="mt-2 text-sm text-muted-foreground ml-14">
+            Full-file ffmpeg passes for loudness, transitions, splice and silence evidence, in both passes. Turn off on a small host that sends transcription and detection elsewhere; the model then works from the transcript alone and the splice hold never fires.
+          </p>
+        </div>
+        <div>
+          <label className="flex items-center gap-3 cursor-pointer">
+            <ToggleSwitch
+              checked={spliceEvidenceEnabled}
+              onChange={onSpliceEvidenceEnabledChange}
+              ariaLabel="Collect splice evidence"
+            />
+            <span className="text-sm font-medium text-foreground">Collect splice evidence</span>
+          </label>
+          <p className="mt-2 text-sm text-muted-foreground ml-14">
+            The most expensive part of audio analysis: a second decode of the whole file to find edit points. Needs audio analysis on.
+          </p>
+        </div>
+        <div>
+          <label className="flex items-center gap-3 cursor-pointer">
+            <ToggleSwitch
+              checked={fingerprintMatchingEnabled}
+              onChange={onFingerprintMatchingEnabledChange}
+              ariaLabel="Match and store audio fingerprints"
+            />
+            <span className="text-sm font-medium text-foreground">Match and store audio fingerprints</span>
+          </label>
+          <p className="mt-2 text-sm text-muted-foreground ml-14">
+            Runs fpcalc over the whole episode to catch repeated ads by sound and fingerprints newly learned patterns. Text pattern matching keeps working when this is off.
           </p>
         </div>
         <div>

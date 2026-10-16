@@ -34,6 +34,13 @@ from config import (
 )
 from artwork_watermark import BADGE_POSITIONS
 from audio_processor import NORMALIZE_PRESETS
+
+# Local-processing switches (plusminuspod): payload key -> settings key.
+LOCAL_PROCESSING_BOOL_FIELDS = (
+    ('audioAnalysisEnabled', 'audio_analysis_enabled'),
+    ('spliceEvidenceEnabled', 'splice_evidence_enabled'),
+    ('fingerprintMatchingEnabled', 'fingerprint_matching_enabled'),
+)
 from database.settings import (
     AD_RESET_SETTING_KEYS, SETTINGS_REGISTRY,
     registry_get_default,
@@ -262,6 +269,9 @@ def _validate_processing_defaults_payload(data):
         return 'transcriptDifferentialEnabled must be a boolean', 400
     if 'spliceVetoEnabled' in data and not isinstance(data['spliceVetoEnabled'], bool):
         return 'spliceVetoEnabled must be a boolean', 400
+    for payload_key, _setting_key in LOCAL_PROCESSING_BOOL_FIELDS:
+        if payload_key in data and not isinstance(data[payload_key], bool):
+            return f'{payload_key} must be a boolean', 400
     if 'differentialFetchMode' in data:
         value = str(data['differentialFetchMode'] or '').strip().lower()
         if value not in ('auto', 'on', 'off'):
@@ -1620,6 +1630,13 @@ def _apply_positional_prior_fields(db, data):
         enabled = coerce_bool_setting(data['spliceVetoEnabled'])
         db.set_setting('splice_veto_enabled', 'true' if enabled else 'false', is_default=False)
         logger.info(f"Updated splice_veto_enabled to: {enabled}")
+
+    # Local-processing switches (plusminuspod).
+    for payload_key, setting_key in LOCAL_PROCESSING_BOOL_FIELDS:
+        if payload_key in data:
+            enabled = coerce_bool_setting(data[payload_key])
+            db.set_setting(setting_key, 'true' if enabled else 'false', is_default=False)
+            logger.info(f"Updated {setting_key} to: {enabled}")
     return
 
 

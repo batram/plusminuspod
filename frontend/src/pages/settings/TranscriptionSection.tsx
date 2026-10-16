@@ -44,6 +44,8 @@ interface TranscriptionSectionProps {
   onTranscribeChunkOverlapSecondsChange: (value: number) => void;
   skipFlacCompression: boolean;
   onSkipFlacCompressionChange: (value: boolean) => void;
+  transcribeRawApiChunks: boolean;
+  onTranscribeRawApiChunksChange: (value: boolean) => void;
   whisperPoolEnabled: boolean;
   onWhisperPoolEnabledChange: (value: boolean) => void;
   whisperPoolMaxRequests: number;
@@ -94,6 +96,8 @@ function TranscriptionSection({
   onWhisperMaxAttemptsChange,
   skipFlacCompression,
   onSkipFlacCompressionChange,
+  transcribeRawApiChunks,
+  onTranscribeRawApiChunksChange,
   whisperPoolEnabled,
   onWhisperPoolEnabledChange,
   whisperPoolMaxRequests,
@@ -385,6 +389,24 @@ function TranscriptionSection({
           <p className="mt-1 text-sm text-muted-foreground">
             Uploads the preprocessed WAV instead of re-encoding to FLAC. Applies to the API
             backend only. Off by default so public endpoints stay under their upload limits.
+          </p>
+        </div>
+
+        <div className="pt-2 border-t border-border">
+          <label className="flex items-center gap-3 cursor-pointer">
+            <ToggleSwitch
+              checked={transcribeRawApiChunks}
+              onChange={onTranscribeRawApiChunksChange}
+              ariaLabel={transcribeRawApiChunks ? 'Send raw MP3 chunks enabled' : 'Send raw MP3 chunks disabled'}
+            />
+            <span className="text-sm font-medium text-foreground">
+              Send raw MP3 chunks
+            </span>
+          </label>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Stream-copies each chunk from the MP3 instead of decoding and normalising it first.
+            Seconds instead of minutes per chunk on a slow CPU; hosted Whisper models normalise
+            on their own. API backend and MP3 sources only; other formats keep the full pass.
           </p>
         </div>
 

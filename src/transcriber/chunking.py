@@ -36,8 +36,21 @@ MIN_CLIP_SECONDS = 0.1
 
 
 def raw_api_chunks_enabled() -> bool:
-    """caput patch: MINUSPOD_RAW_API_CHUNKS=true skips decode+loudnorm for MP3 sources."""
-    return os.environ.get('MINUSPOD_RAW_API_CHUNKS', '').strip().lower() in ('1', 'true', 'yes', 'on')
+    """Skip decode+loudnorm and upload stream-copied MP3 spans to the remote API.
+
+    On via the ``transcribe_raw_api_chunks`` setting (Settings > Transcription)
+    or the ``MINUSPOD_RAW_API_CHUNKS`` env var; env wins when set so a source
+    install can force it before the UI is reachable.
+    """
+    env = os.environ.get('MINUSPOD_RAW_API_CHUNKS', '').strip().lower()
+    if env:
+        return env in ('1', 'true', 'yes', 'on')
+    try:
+        import database
+        return database.Database().get_setting_bool('transcribe_raw_api_chunks', default=False)
+    except Exception as exc:
+        logger.warning(f"Failed to read transcribe_raw_api_chunks: {exc}")
+        return False
 
 
 def extract_audio_chunk(

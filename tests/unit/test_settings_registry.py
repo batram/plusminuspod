@@ -77,6 +77,10 @@ SEED_SNAPSHOT = {
     'process_new_episodes_first': '1',
     'dai_differential_overrides_keep': 'true',
     'splice_veto_enabled': 'true',
+    'audio_analysis_enabled': 'true',
+    'splice_evidence_enabled': 'true',
+    'fingerprint_matching_enabled': 'true',
+    'transcribe_raw_api_chunks': 'false',
     'differential_hold_min_seconds': '10',
     'differential_measured_corr_max': '0.60',
     'differential_fetch_mode': 'auto',
@@ -230,6 +234,8 @@ EXPECTED_AD_RESET_KEYS = {
     'learning_min_pattern_duration', 'learning_max_pattern_duration',
     'differential_measured_corr_max', 'differential_hold_min_seconds',
     'dai_differential_overrides_keep', 'splice_veto_enabled',
+    'audio_analysis_enabled', 'splice_evidence_enabled',
+    'fingerprint_matching_enabled', 'transcribe_raw_api_chunks',
     'ad_detection_exclude_start_seconds',
     # Provider failover (#806).
     'whisper_max_attempts',
@@ -540,11 +546,13 @@ class TestGetDefaults:
         # maxLlmWindowAdSeconds added after that (166 -> 167), then
         # downloadHistoryEnabled + downloadGeoLookupEnabled +
         # downloadHistoryRetentionDays (167 -> 170).
+        # plusminuspod: audioAnalysisEnabled + spliceEvidenceEnabled +
+        # fingerprintMatchingEnabled + transcribeRawApiChunks (170 -> 174).
         payload_keys = {
             spec.payload_key for spec in SETTINGS_REGISTRY.values()
             if spec.payload_key
         }
-        assert len(payload_keys) == 170
+        assert len(payload_keys) == 174
         assert 'systemoneBaseUrl' in payload_keys
         assert 'failoverWhisperMaxAttempts' in payload_keys
         assert 'audioCuePairOrientWindowSeconds' not in payload_keys

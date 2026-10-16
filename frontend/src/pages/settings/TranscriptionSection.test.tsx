@@ -34,6 +34,7 @@ function renderSection(
     whisperApiTimeoutSeconds: 600, onWhisperApiTimeoutSecondsChange: noop,
     whisperMaxAttempts: 2, onWhisperMaxAttemptsChange: noop,
     skipFlacCompression: false, onSkipFlacCompressionChange: noop,
+    transcribeRawApiChunks: false, onTranscribeRawApiChunksChange: noop,
     softTimeoutMinutes: 60, hardTimeoutMinutes: 120, softMinMinutes: 5, hardMaxMinutes: 1440,
     onSoftTimeoutChange: noop, onHardTimeoutChange: noop,
     onTimeoutsSave: noop, timeoutsSaveIsPending: false, timeoutsSaveIsSuccess: false, timeoutsError: null,

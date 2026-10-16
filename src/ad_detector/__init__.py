@@ -2447,7 +2447,9 @@ class AdDetector:
         fp_pairs = [(fp['start'], fp['end']) for fp in false_positive_regions]
 
         # Stage 1: Audio Fingerprint Matching (skip if skip_patterns=True)
-        if not skip_patterns and audio_path and self.audio_fingerprinter and self.audio_fingerprinter.is_available():
+        if (not skip_patterns and audio_path and self.audio_fingerprinter
+                and self.audio_fingerprinter.is_available()
+                and self._fingerprint_matching_enabled()):
             try:
                 logger.info(f"[{slug}:{episode_id}] Stage 1: Audio fingerprint matching")
                 fp_matches = self.audio_fingerprinter.find_matches(audio_path, cancel_event=cancel_event)
@@ -2838,6 +2840,17 @@ class AdDetector:
             for absorbed in getattr(match, 'absorbed_ids', []) or []:
                 self.pattern_service.record_pattern_match(absorbed, episode_id)
 
+    def _fingerprint_matching_enabled(self) -> bool:
+        """Global switch for fpcalc work: full-file matching and storing new
+        fingerprints (plusminuspod). Pattern text matching is unaffected."""
+        if self.db is None:
+            return True
+        try:
+            return self.db.get_setting_bool('fingerprint_matching_enabled', default=True)
+        except Exception as exc:
+            logger.warning(f"Failed to read fingerprint_matching_enabled: {exc}")
+            return True
+
     def _is_region_covered(self, start: float, end: float,
                            covered_regions: list) -> bool:
         """Check if a time region is substantially covered by existing detections."""
@@ -3080,7 +3093,8 @@ class AdDetector:
                 # Each pattern is fingerprinted against its own piece, so a
                 # split span's audio still matches the pattern that covers it.
                 if (audio_path and self.audio_fingerprinter
-                        and self.audio_fingerprinter.is_available()):
+                        and self.audio_fingerprinter.is_available()
+                        and self._fingerprint_matching_enabled()):
                     for created in pattern_ids:
                         try:
                             self.audio_fingerprinter.store_fingerprint(

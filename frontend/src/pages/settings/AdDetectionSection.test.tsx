@@ -28,6 +28,9 @@ interface TunablesState {
   daiDifferentialOverridesKeep: boolean;
   spliceVetoEnabled: boolean;
   transcriptDifferentialEnabled: boolean;
+  audioAnalysisEnabled: boolean;
+  spliceEvidenceEnabled: boolean;
+  fingerprintMatchingEnabled: boolean;
 }
 
 function defaultState(): TunablesState {
@@ -49,6 +52,9 @@ function defaultState(): TunablesState {
     daiDifferentialOverridesKeep: true,
     spliceVetoEnabled: true,
     transcriptDifferentialEnabled: true,
+    audioAnalysisEnabled: true,
+    spliceEvidenceEnabled: true,
+    fingerprintMatchingEnabled: true,
   };
 }
 
@@ -94,6 +100,12 @@ function Harness({ onCommit }: { onCommit: (payload: TunablesState) => void }) {
         onDaiDifferentialOverridesKeepChange={patch('daiDifferentialOverridesKeep')}
         spliceVetoEnabled={state.spliceVetoEnabled}
         onSpliceVetoEnabledChange={patch('spliceVetoEnabled')}
+        audioAnalysisEnabled={state.audioAnalysisEnabled}
+        onAudioAnalysisEnabledChange={patch('audioAnalysisEnabled')}
+        spliceEvidenceEnabled={state.spliceEvidenceEnabled}
+        onSpliceEvidenceEnabledChange={patch('spliceEvidenceEnabled')}
+        fingerprintMatchingEnabled={state.fingerprintMatchingEnabled}
+        onFingerprintMatchingEnabledChange={patch('fingerprintMatchingEnabled')}
         transcriptDifferentialEnabled={state.transcriptDifferentialEnabled}
         onTranscriptDifferentialEnabledChange={patch('transcriptDifferentialEnabled')}
       />
@@ -273,6 +285,9 @@ describe('AdDetectionSection: commit fires the batched save payload with camelCa
       daiDifferentialOverridesKeep: true,
       spliceVetoEnabled: true,
       transcriptDifferentialEnabled: true,
+      audioAnalysisEnabled: true,
+      spliceEvidenceEnabled: true,
+      fingerprintMatchingEnabled: true,
     });
   });
 });

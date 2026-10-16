@@ -929,6 +929,10 @@ export interface Settings {
   differentialHoldMinSeconds: SettingValueNumber;
   daiDifferentialOverridesKeep: SettingValueBoolean;
   spliceVetoEnabled: SettingValueBoolean;
+  audioAnalysisEnabled: SettingValueBoolean;
+  spliceEvidenceEnabled: SettingValueBoolean;
+  fingerprintMatchingEnabled: SettingValueBoolean;
+  transcribeRawApiChunks: SettingValueBoolean;
   vttTranscriptsEnabled: SettingValueBoolean;
   chaptersEnabled: SettingValueBoolean;
   chaptersMode: SettingValue;
@@ -1136,6 +1140,10 @@ export interface Settings {
     differentialHoldMinSeconds: number;
     daiDifferentialOverridesKeep: boolean;
     spliceVetoEnabled: boolean;
+    audioAnalysisEnabled: boolean;
+    spliceEvidenceEnabled: boolean;
+    fingerprintMatchingEnabled: boolean;
+    transcribeRawApiChunks: boolean;
   };
 }
 
@@ -1257,6 +1265,10 @@ export interface UpdateSettingsPayload {
   differentialHoldMinSeconds?: number;
   daiDifferentialOverridesKeep?: boolean;
   spliceVetoEnabled?: boolean;
+  audioAnalysisEnabled?: boolean;
+  spliceEvidenceEnabled?: boolean;
+  fingerprintMatchingEnabled?: boolean;
+  transcribeRawApiChunks?: boolean;
   vttTranscriptsEnabled?: boolean;
   chaptersEnabled?: boolean;
   chaptersMode?: 'auto' | 'generate' | 'off';

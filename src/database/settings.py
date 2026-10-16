@@ -936,6 +936,23 @@ SETTINGS_REGISTRY: dict[str, SettingSpec] = {
     'splice_veto_enabled': SettingSpec(
         default='true', seeded=True, in_ad_reset=True,
         payload_key='spliceVetoEnabled', payload_kind='bool'),
+    # Local-processing switches (plusminuspod). Each one turns off a CPU-heavy
+    # pass over the whole episode so a small host that already sends
+    # transcription and detection to remote services does not stall on ffmpeg,
+    # fpcalc or numpy work. Off means the downstream consumers see "no
+    # evidence" and degrade the way they already do when a pass fails.
+    'audio_analysis_enabled': SettingSpec(
+        default='true', seeded=True, in_ad_reset=True,
+        payload_key='audioAnalysisEnabled', payload_kind='bool'),
+    'splice_evidence_enabled': SettingSpec(
+        default='true', seeded=True, in_ad_reset=True,
+        payload_key='spliceEvidenceEnabled', payload_kind='bool'),
+    'fingerprint_matching_enabled': SettingSpec(
+        default='true', seeded=True, in_ad_reset=True,
+        payload_key='fingerprintMatchingEnabled', payload_kind='bool'),
+    'transcribe_raw_api_chunks': SettingSpec(
+        default='false', seeded=True, in_ad_reset=True,
+        payload_key='transcribeRawApiChunks', payload_kind='bool'),
     'differential_hold_min_seconds': SettingSpec(
         default='10', seeded=True, in_ad_reset=True,
         payload_key='differentialHoldMinSeconds', payload_kind='float'),

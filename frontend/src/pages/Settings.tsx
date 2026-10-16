@@ -259,6 +259,11 @@ function Settings() {
   const [daiDifferentialOverridesKeep, setDaiDifferentialOverridesKeep] = useState(true);
   const [spliceVetoEnabled, setSpliceVetoEnabled] = useState(true);
   const [transcriptDifferentialEnabled, setTranscriptDifferentialEnabled] = useState(true);
+  // Local-processing switches (plusminuspod)
+  const [audioAnalysisEnabled, setAudioAnalysisEnabled] = useState(true);
+  const [spliceEvidenceEnabled, setSpliceEvidenceEnabled] = useState(true);
+  const [fingerprintMatchingEnabled, setFingerprintMatchingEnabled] = useState(true);
+  const [transcribeRawApiChunks, setTranscribeRawApiChunks] = useState(false);
   // Neutral placeholder (cast); replaced by hydration before the form renders.
   const [llmProvider, setLlmProvider] = useState<LlmProvider>('' as LlmProvider);
   const [openaiBaseUrl, setOpenaiBaseUrl] = useState('');
@@ -909,6 +914,11 @@ function Settings() {
     { key: 'daiDifferentialOverridesKeep', kind: 'val', useDefault: true, literal: true, value: daiDifferentialOverridesKeep, set: setDaiDifferentialOverridesKeep },
     { key: 'spliceVetoEnabled', kind: 'val', useDefault: true, literal: true, value: spliceVetoEnabled, set: setSpliceVetoEnabled },
     { key: 'transcriptDifferentialEnabled', kind: 'val', useDefault: true, literal: true, value: transcriptDifferentialEnabled, set: setTranscriptDifferentialEnabled },
+    // Local-processing switches (plusminuspod)
+    { key: 'audioAnalysisEnabled', kind: 'val', useDefault: true, literal: true, value: audioAnalysisEnabled, set: setAudioAnalysisEnabled },
+    { key: 'spliceEvidenceEnabled', kind: 'val', useDefault: true, literal: true, value: spliceEvidenceEnabled, set: setSpliceEvidenceEnabled },
+    { key: 'fingerprintMatchingEnabled', kind: 'val', useDefault: true, literal: true, value: fingerprintMatchingEnabled, set: setFingerprintMatchingEnabled },
+    { key: 'transcribeRawApiChunks', kind: 'val', useDefault: true, literal: false, value: transcribeRawApiChunks, set: setTranscribeRawApiChunks },
     // Audio cue detection (nested `audioCue` state)
     { key: 'audioCueDetectionEnabled', kind: 'val', useDefault: true, value: audioCue.enabled, obj: 'audioCue', prop: 'enabled' },
     { key: 'audioCueFreqMinHz', kind: 'val', useDefault: true, value: audioCue.freqMinHz, obj: 'audioCue', prop: 'freqMinHz' },
@@ -1512,6 +1522,8 @@ function Settings() {
         onTranscribeChunkOverlapSecondsChange={setTranscribeChunkOverlapSeconds}
         skipFlacCompression={skipFlacCompression}
         onSkipFlacCompressionChange={setSkipFlacCompression}
+        transcribeRawApiChunks={transcribeRawApiChunks}
+        onTranscribeRawApiChunksChange={setTranscribeRawApiChunks}
         whisperPoolEnabled={whisperPoolEnabled}
         onWhisperPoolEnabledChange={setWhisperPoolEnabled}
         whisperPoolMaxRequests={whisperPoolMaxRequests}
@@ -1569,6 +1581,12 @@ function Settings() {
         onSpliceVetoEnabledChange={setSpliceVetoEnabled}
         transcriptDifferentialEnabled={transcriptDifferentialEnabled}
         onTranscriptDifferentialEnabledChange={setTranscriptDifferentialEnabled}
+        audioAnalysisEnabled={audioAnalysisEnabled}
+        onAudioAnalysisEnabledChange={setAudioAnalysisEnabled}
+        spliceEvidenceEnabled={spliceEvidenceEnabled}
+        onSpliceEvidenceEnabledChange={setSpliceEvidenceEnabled}
+        fingerprintMatchingEnabled={fingerprintMatchingEnabled}
+        onFingerprintMatchingEnabledChange={setFingerprintMatchingEnabled}
         onDifferentialHoldMinSecondsChange={setDifferentialHoldMinSeconds}
       />
 
